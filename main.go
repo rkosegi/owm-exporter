@@ -86,17 +86,20 @@ func main() {
 	kingpin.Parse()
 
 	logger := promlog.New(promlogConfig)
-	level.Info(logger).Log("msg", fmt.Sprintf("Starting %s", PROG_NAME), "version", version.Info())
-	level.Info(logger).Log("msg", "Build context", version.BuildContext())
-	level.Info(logger).Log("msg", "Loading configuration", "config", *configFile)
+	//nolint:errcheck
+	level.Info(logger).Log("msg", fmt.Sprintf("Starting %s", PROG_NAME),
+		"version", version.Info(),
+		"config", *configFile)
 
 	config, err := config.LoadConfig(*configFile)
 
 	if err != nil {
+		//nolint:errcheck
 		level.Error(logger).Log("msg", "Error reading configuration", "err", err)
 		os.Exit(1)
 	}
 
+	//nolint:errcheck
 	level.Info(logger).Log("msg", fmt.Sprintf("Got %d targets", len(config.Targets)))
 
 	var landingPage = []byte(`<html>
@@ -111,13 +114,18 @@ func main() {
 	handlerFunc := newHandler(config, logger, exporter.NewExporterMetrics())
 	http.Handle(*metricPath, promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, handlerFunc))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(landingPage)
+		if _, err = w.Write(landingPage); err != nil {
+			//nolint:errcheck
+			level.Error(logger).Log("msg", "Unable to write page content", "err", err)
+		}
 	})
 
+	//nolint:errcheck
 	level.Info(logger).Log("msg", "Listening on address", "address", *listenAddress)
 
 	srv := &http.Server{Addr: *listenAddress}
 	if err := web.ListenAndServe(srv, *webConfig, logger); err != nil {
+		//nolint:errcheck
 		level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
 		os.Exit(1)
 	}

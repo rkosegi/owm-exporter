@@ -72,7 +72,7 @@ var (
 func (client *OwmClient) Fetch(ctx context.Context, target types.Target, logger log.Logger) (*ApiResponse, error) {
 	var fetch = true
 	last, present := cache[target.Name]
-	if present == true {
+	if present {
 		if time.Now().Unix() < int64(target.Interval)+last.lastUpdate.Unix() {
 			fetch = false
 		}
@@ -82,12 +82,14 @@ func (client *OwmClient) Fetch(ctx context.Context, target types.Target, logger 
 		var uri = fmt.Sprintf("%s?lat=%s&lon=%s&units=metric&appid=%s",
 			BASE_URI, target.Latitude, target.Longitude, client.AppId)
 
+		//nolint:errcheck
 		level.Info(logger).Log("msg", "Fetching current conditions", "name", target.Name)
 
 		resp, err := http.Get(uri)
 
 		client.metrics.ApiRequests.WithLabelValues(target.Name).Inc()
 
+		//nolint:errcheck
 		level.Debug(logger).Log("msg", "Got response from API", "code", resp.StatusCode)
 
 		if err != nil {
@@ -111,9 +113,9 @@ func (client *OwmClient) Fetch(ctx context.Context, target types.Target, logger 
 		}
 
 	} else {
-		level.Debug(logger).Log("msg", "Results are being fetched from cache", "name", target.Name)
+		//nolint:errcheck
+		level.Debug(logger).Log("msg", "Results are being served from cache", "name", target.Name)
 
 		return last.lastResponse, nil
 	}
-	return nil, nil
 }
