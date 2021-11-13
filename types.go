@@ -11,31 +11,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package main
 
-import (
-	"os"
+import "github.com/prometheus/client_golang/prometheus"
 
-	"gopkg.in/yaml.v2"
+type ExporterMetrics struct {
+	TotalScrapes prometheus.Counter
+	ScrapeErrors *prometheus.CounterVec
+	ApiRequests  *prometheus.CounterVec
+	Error        prometheus.Gauge
+}
 
-	"github.com/rkosegi/owm-exporter/types"
-)
+type Target struct {
+	Latitude  string `yaml:"lat"`
+	Longitude string `yaml:"lon"`
+	Interval  int    `yaml:"interval"`
+	Name      string `yaml:"name"`
+}
 
-func LoadConfig(configFile string) (*types.Config, error) {
-	var cfg = &types.Config{}
-
-	file, err := os.Open(configFile)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	d := yaml.NewDecoder(file)
-	d.SetStrict(true)
-
-	if err := d.Decode(&cfg); err != nil {
-		return nil, err
-	}
-
-	return cfg, nil
+type Config struct {
+	ApiKey  string   `yaml:"apiKey"`
+	Targets []Target `yaml:"targets"`
 }

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package client
+package main
 
 import (
 	"context"
@@ -24,7 +24,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/rkosegi/owm-exporter/types"
 )
 
 const (
@@ -55,10 +54,10 @@ type ApiResponse struct {
 
 type OwmClient struct {
 	AppId   string
-	metrics types.ExporterMetrics
+	metrics ExporterMetrics
 }
 
-func NewClient(apiKey string, metrics types.ExporterMetrics) OwmClient {
+func NewClient(apiKey string, metrics ExporterMetrics) OwmClient {
 	return OwmClient{
 		AppId:   apiKey,
 		metrics: metrics,
@@ -69,7 +68,7 @@ var (
 	cache = map[string]CacheEntry{}
 )
 
-func (client *OwmClient) Fetch(ctx context.Context, target types.Target, logger log.Logger) (*ApiResponse, error) {
+func (client *OwmClient) Fetch(ctx context.Context, target Target, logger log.Logger) (*ApiResponse, error) {
 	var fetch = true
 	last, present := cache[target.Name]
 	if present {

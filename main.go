@@ -30,10 +30,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/prometheus/exporter-toolkit/web"
-
-	"github.com/rkosegi/owm-exporter/config"
-	"github.com/rkosegi/owm-exporter/exporter"
-	"github.com/rkosegi/owm-exporter/types"
 )
 
 const (
@@ -63,11 +59,11 @@ func init() {
 	prometheus.MustRegister(version.NewCollector(PROG_NAME))
 }
 
-func newHandler(config *types.Config, logger log.Logger, exporterMetrics types.ExporterMetrics) http.HandlerFunc {
+func newHandler(config *Config, logger log.Logger, exporterMetrics ExporterMetrics) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		registry := prometheus.NewRegistry()
-		registry.MustRegister(exporter.NewExporter(ctx, config, logger, exporterMetrics))
+		registry.MustRegister(NewExporter(ctx, config, logger, exporterMetrics))
 
 		gatherers := prometheus.Gatherers{
 			prometheus.DefaultGatherer,
@@ -91,7 +87,7 @@ func main() {
 		"version", version.Info(),
 		"config", *configFile)
 
-	config, err := config.LoadConfig(*configFile)
+	config, err := LoadConfig(*configFile)
 
 	if err != nil {
 		//nolint:errcheck
@@ -111,7 +107,7 @@ func main() {
 </html>
 `)
 
-	handlerFunc := newHandler(config, logger, exporter.NewExporterMetrics())
+	handlerFunc := newHandler(config, logger, NewExporterMetrics())
 	http.Handle(*metricPath, promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, handlerFunc))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if _, err = w.Write(landingPage); err != nil {

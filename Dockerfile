@@ -6,10 +6,10 @@ COPY go.sum go.sum
 RUN go mod download
 
 COPY main.go main.go
-COPY config/ config/
-COPY client/ client/
-COPY types/ types/
-COPY exporter/ exporter/
+COPY config.go config.go
+COPY client.go client.go
+COPY types.go types.go
+COPY exporter.go exporter.go
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o owm-exporter .
 

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package exporter
+package main
 
 import (
 	"context"
@@ -19,8 +19,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/rkosegi/owm-exporter/client"
-	"github.com/rkosegi/owm-exporter/types"
 )
 
 const (
@@ -73,9 +71,9 @@ var (
 type Exporter struct {
 	ctx     context.Context
 	logger  log.Logger
-	config  *types.Config
-	metrics types.ExporterMetrics
-	client  client.OwmClient
+	config  *Config
+	metrics ExporterMetrics
+	client  OwmClient
 }
 
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
@@ -130,19 +128,19 @@ func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) {
 	}
 }
 
-func NewExporter(ctx context.Context, config *types.Config, logger log.Logger,
-	exporterMetrics types.ExporterMetrics) *Exporter {
+func NewExporter(ctx context.Context, config *Config, logger log.Logger,
+	exporterMetrics ExporterMetrics) *Exporter {
 	return &Exporter{
 		ctx:     ctx,
 		logger:  logger,
 		config:  config,
 		metrics: exporterMetrics,
-		client:  client.NewClient(config.ApiKey, exporterMetrics),
+		client:  NewClient(config.ApiKey, exporterMetrics),
 	}
 }
 
-func NewExporterMetrics() types.ExporterMetrics {
-	return types.ExporterMetrics{
+func NewExporterMetrics() ExporterMetrics {
+	return ExporterMetrics{
 		TotalScrapes: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
