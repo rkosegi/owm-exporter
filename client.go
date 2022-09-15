@@ -16,18 +16,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 )
 
 const (
-	BASE_URI = "https://api.openweathermap.org/data/2.5/weather"
+	baseUri = "https://api.openweathermap.org/data/2.5/weather"
 )
 
 type CacheEntry struct {
@@ -68,7 +68,7 @@ var (
 	cache = map[string]CacheEntry{}
 )
 
-func (client *OwmClient) Fetch(ctx context.Context, target Target, logger log.Logger) (*ApiResponse, error) {
+func (client *OwmClient) Fetch(_ context.Context, target Target, logger log.Logger) (*ApiResponse, error) {
 	var fetch = true
 	last, present := cache[target.Name]
 	if present {
@@ -79,7 +79,7 @@ func (client *OwmClient) Fetch(ctx context.Context, target Target, logger log.Lo
 	if fetch {
 
 		var uri = fmt.Sprintf("%s?lat=%s&lon=%s&units=metric&appid=%s",
-			BASE_URI, target.Latitude, target.Longitude, client.AppId)
+			baseUri, target.Latitude, target.Longitude, client.AppId)
 
 		//nolint:errcheck
 		level.Info(logger).Log("msg", "Fetching current conditions", "name", target.Name)
@@ -94,11 +94,17 @@ func (client *OwmClient) Fetch(ctx context.Context, target Target, logger log.Lo
 		if err != nil {
 			return nil, err
 		}
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
+		defer func(Body io.ReadCloser) {
+			err = Body.Close()
+			if err != nil {
+				//nolint:errcheck
+				level.Warn(logger).Log("msg", "failed to close body", "error", err)
+			}
+		}(resp.Body)
 		var apiResponse ApiResponse
 		err = json.Unmarshal(body, &apiResponse)
 		if err != nil {
@@ -114,7 +120,6 @@ func (client *OwmClient) Fetch(ctx context.Context, target Target, logger log.Lo
 	} else {
 		//nolint:errcheck
 		level.Debug(logger).Log("msg", "Results are being served from cache", "name", target.Name)
-
 		return last.lastResponse, nil
 	}
 }

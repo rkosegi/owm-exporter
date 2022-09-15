@@ -5,10 +5,17 @@ This is prometheus exporter for Openweathermap current conditions at particular 
 
 ### Building
 
-Build requires docker.
+#### Docker build
 
 ```shell
-make build
+make build-docker
+```
+
+#### Local build
+
+
+```shell
+make build-local
 ```
 
 ### Running

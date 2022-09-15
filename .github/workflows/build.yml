@@ -1,24 +1,35 @@
+---
 name: Build
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.18
 
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          ref: ${{github.event.pull_request.head.sha}}
 
-    - name: Lint
-      uses: golangci/golangci-lint-action@v3
-      with:
-        version: v1.42.0
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.50.0
+          args: --timeout=3m
 
-    - name: Build
-      run: docker build . --file Dockerfile --tag owm-exporter:$(date +%s)
+      - name: Download go dependencies
+        run: go mod download
+
+      - name: Run build
+        run: go build
 
