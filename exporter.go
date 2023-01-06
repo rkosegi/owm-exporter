@@ -14,156 +14,156 @@
 package main
 
 import (
-    "context"
+	"context"
 
-    "github.com/go-kit/log"
-    "github.com/go-kit/log/level"
-    "github.com/prometheus/client_golang/prometheus"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
-    subsystem = "exporter"
-    namespace = "owm"
+	subsystem = "exporter"
+	namespace = "owm"
 )
 
 var (
-    currentTemperatureDesc = prometheus.NewDesc(
-        prometheus.BuildFQName(namespace, "current", "temperature"),
-        "The current temperature.",
-        []string{"location"}, nil)
+	currentTemperatureDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "temperature"),
+		"The current temperature.",
+		[]string{"location"}, nil)
 
-    currentTemperatureMinDesc = prometheus.NewDesc(
-        prometheus.BuildFQName(namespace, "current", "temperature_min"),
-        "The minimal currently observed temperature.",
-        []string{"location"}, nil)
+	currentTemperatureMinDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "temperature_min"),
+		"The minimal currently observed temperature.",
+		[]string{"location"}, nil)
 
-    currentTemperatureMaxDesc = prometheus.NewDesc(
-        prometheus.BuildFQName(namespace, "current", "temperature_max"),
-        "The maximal currently observed temperature.",
-        []string{"location"}, nil)
+	currentTemperatureMaxDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "temperature_max"),
+		"The maximal currently observed temperature.",
+		[]string{"location"}, nil)
 
-    currentTemperatureFeelDesc = prometheus.NewDesc(
-        prometheus.BuildFQName(namespace, "current", "temperature_feel"),
-        "The current temperature feel like.",
-        []string{"location"}, nil)
+	currentTemperatureFeelDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "temperature_feel"),
+		"The current temperature feel like.",
+		[]string{"location"}, nil)
 
-    currentHumidityDesc = prometheus.NewDesc(
-        prometheus.BuildFQName(namespace, "current", "humidity"),
-        "The current humidity.",
-        []string{"location"}, nil)
+	currentHumidityDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "humidity"),
+		"The current humidity.",
+		[]string{"location"}, nil)
 
-    currentPressureDesc = prometheus.NewDesc(
-        prometheus.BuildFQName(namespace, "current", "pressure"),
-        "The current atmospheric pressure.",
-        []string{"location"}, nil)
+	currentPressureDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "pressure"),
+		"The current atmospheric pressure.",
+		[]string{"location"}, nil)
 
-    currentWindSpeedDesc = prometheus.NewDesc(
-        prometheus.BuildFQName(namespace, "current", "wind_speed"),
-        "The current wind speed.",
-        []string{"location"}, nil)
+	currentWindSpeedDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "wind_speed"),
+		"The current wind speed.",
+		[]string{"location"}, nil)
 
-    currentWindDirectionDesc = prometheus.NewDesc(
-        prometheus.BuildFQName(namespace, "current", "wind_direction"),
-        "The current wind direction in degrees.",
-        []string{"location"}, nil)
+	currentWindDirectionDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "wind_direction"),
+		"The current wind direction in degrees.",
+		[]string{"location"}, nil)
 )
 
 type Exporter struct {
-    ctx     context.Context
-    logger  log.Logger
-    config  *Config
-    metrics ExporterMetrics
-    client  OwmClient
+	ctx     context.Context
+	logger  log.Logger
+	config  *Config
+	metrics ExporterMetrics
+	client  OwmClient
 }
 
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
-    ch <- e.metrics.TotalScrapes.Desc()
-    ch <- e.metrics.Error.Desc()
-    e.metrics.ScrapeErrors.Describe(ch)
+	ch <- e.metrics.TotalScrapes.Desc()
+	ch <- e.metrics.Error.Desc()
+	e.metrics.ScrapeErrors.Describe(ch)
 }
 
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-    e.scrape(e.ctx, ch)
+	e.scrape(e.ctx, ch)
 
-    ch <- e.metrics.TotalScrapes
-    ch <- e.metrics.Error
+	ch <- e.metrics.TotalScrapes
+	ch <- e.metrics.Error
 
-    e.metrics.ScrapeErrors.Collect(ch)
-    e.metrics.ApiRequests.Collect(ch)
+	e.metrics.ScrapeErrors.Collect(ch)
+	e.metrics.ApiRequests.Collect(ch)
 }
 
 func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) {
-    e.metrics.TotalScrapes.Inc()
-    e.metrics.Error.Set(0)
+	e.metrics.TotalScrapes.Inc()
+	e.metrics.Error.Set(0)
 
-    for _, target := range e.config.Targets {
-        //nolint:errcheck
-        level.Debug(e.logger).Log("msg", "Processing target", "target", target.Name)
+	for _, target := range e.config.Targets {
+		//nolint:errcheck
+		level.Debug(e.logger).Log("msg", "Processing target", "target", target.Name)
 
-        resp, err := e.client.Fetch(ctx, target, e.logger)
-        if err != nil {
-            //nolint:errcheck
-            level.Error(e.logger).Log("msg", "Error while fetching current conditions",
-                "name", target.Name, "err", err)
-            e.metrics.ScrapeErrors.WithLabelValues("collect.current." + target.Name).Inc()
-            e.metrics.Error.Set(1)
-        } else {
-            ch <- prometheus.MustNewConstMetric(currentTemperatureDesc,
-                prometheus.GaugeValue, float64(resp.Main.Temp), target.Name)
-            ch <- prometheus.MustNewConstMetric(currentTemperatureMinDesc,
-                prometheus.GaugeValue, float64(resp.Main.TempMin), target.Name)
-            ch <- prometheus.MustNewConstMetric(currentTemperatureMaxDesc,
-                prometheus.GaugeValue, float64(resp.Main.TempMax), target.Name)
-            ch <- prometheus.MustNewConstMetric(currentTemperatureFeelDesc,
-                prometheus.GaugeValue, float64(resp.Main.TempFeel), target.Name)
-            ch <- prometheus.MustNewConstMetric(currentHumidityDesc,
-                prometheus.GaugeValue, float64(resp.Main.Humidity), target.Name)
-            ch <- prometheus.MustNewConstMetric(currentPressureDesc,
-                prometheus.GaugeValue, float64(resp.Main.Pressure), target.Name)
-            ch <- prometheus.MustNewConstMetric(currentWindSpeedDesc,
-                prometheus.GaugeValue, float64(resp.Wind.Speed), target.Name)
-            ch <- prometheus.MustNewConstMetric(currentWindDirectionDesc,
-                prometheus.GaugeValue, float64(resp.Wind.Direction), target.Name)
-        }
-    }
+		resp, err := e.client.Fetch(ctx, target, e.logger)
+		if err != nil {
+			//nolint:errcheck
+			level.Error(e.logger).Log("msg", "Error while fetching current conditions",
+				"name", target.Name, "err", err)
+			e.metrics.ScrapeErrors.WithLabelValues("collect.current." + target.Name).Inc()
+			e.metrics.Error.Set(1)
+		} else {
+			ch <- prometheus.MustNewConstMetric(currentTemperatureDesc,
+				prometheus.GaugeValue, float64(resp.Main.Temp), target.Name)
+			ch <- prometheus.MustNewConstMetric(currentTemperatureMinDesc,
+				prometheus.GaugeValue, float64(resp.Main.TempMin), target.Name)
+			ch <- prometheus.MustNewConstMetric(currentTemperatureMaxDesc,
+				prometheus.GaugeValue, float64(resp.Main.TempMax), target.Name)
+			ch <- prometheus.MustNewConstMetric(currentTemperatureFeelDesc,
+				prometheus.GaugeValue, float64(resp.Main.TempFeel), target.Name)
+			ch <- prometheus.MustNewConstMetric(currentHumidityDesc,
+				prometheus.GaugeValue, float64(resp.Main.Humidity), target.Name)
+			ch <- prometheus.MustNewConstMetric(currentPressureDesc,
+				prometheus.GaugeValue, float64(resp.Main.Pressure), target.Name)
+			ch <- prometheus.MustNewConstMetric(currentWindSpeedDesc,
+				prometheus.GaugeValue, float64(resp.Wind.Speed), target.Name)
+			ch <- prometheus.MustNewConstMetric(currentWindDirectionDesc,
+				prometheus.GaugeValue, float64(resp.Wind.Direction), target.Name)
+		}
+	}
 }
 
 func NewExporter(ctx context.Context, config *Config, logger log.Logger,
-    exporterMetrics ExporterMetrics) *Exporter {
-    return &Exporter{
-        ctx:     ctx,
-        logger:  logger,
-        config:  config,
-        metrics: exporterMetrics,
-        client:  NewClient(config.ApiKey, exporterMetrics),
-    }
+	exporterMetrics ExporterMetrics) *Exporter {
+	return &Exporter{
+		ctx:     ctx,
+		logger:  logger,
+		config:  config,
+		metrics: exporterMetrics,
+		client:  NewClient(config.ApiKey, exporterMetrics),
+	}
 }
 
 func NewExporterMetrics() ExporterMetrics {
-    return ExporterMetrics{
-        TotalScrapes: prometheus.NewCounter(prometheus.CounterOpts{
-            Namespace: namespace,
-            Subsystem: subsystem,
-            Name:      "scrapes_total",
-            Help:      "Total number of times OWM was scraped for metrics.",
-        }),
-        ApiRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
-            Namespace: namespace,
-            Subsystem: subsystem,
-            Name:      "api_requests",
-            Help:      "Total number of API requests for given location.",
-        }, []string{"location"}),
-        ScrapeErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
-            Namespace: namespace,
-            Subsystem: subsystem,
-            Name:      "scrape_errors_total",
-            Help:      "Total number of times an error occurred scraping a OWM.",
-        }, []string{"collector"}),
-        Error: prometheus.NewGauge(prometheus.GaugeOpts{
-            Namespace: namespace,
-            Subsystem: subsystem,
-            Name:      "last_scrape_error",
-            Help:      "Whether the last scrape of metrics from OWM resulted in an error (1 for error, 0 for success).",
-        }),
-    }
+	return ExporterMetrics{
+		TotalScrapes: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "scrapes_total",
+			Help:      "Total number of times OWM was scraped for metrics.",
+		}),
+		ApiRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "api_requests",
+			Help:      "Total number of API requests for given location.",
+		}, []string{"location"}),
+		ScrapeErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "scrape_errors_total",
+			Help:      "Total number of times an error occurred scraping a OWM.",
+		}, []string{"collector"}),
+		Error: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "last_scrape_error",
+			Help:      "Whether the last scrape of metrics from OWM resulted in an error (1 for error, 0 for success).",
+		}),
+	}
 }

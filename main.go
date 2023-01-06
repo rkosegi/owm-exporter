@@ -14,86 +14,86 @@
 package main
 
 import (
-    "fmt"
-    "net/http"
-    "os"
+	"fmt"
+	"net/http"
+	"os"
 
-    "github.com/go-kit/log"
-    "github.com/go-kit/log/level"
-    "github.com/prometheus/client_golang/prometheus"
-    "github.com/prometheus/common/promlog"
-    "github.com/prometheus/common/promlog/flag"
-    "github.com/prometheus/common/version"
-    webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
-    "gopkg.in/alecthomas/kingpin.v2"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/common/promlog/flag"
+	"github.com/prometheus/common/version"
+	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
+	"gopkg.in/alecthomas/kingpin.v2"
 
-    "github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-    "github.com/prometheus/exporter-toolkit/web"
+	"github.com/prometheus/exporter-toolkit/web"
 )
 
 const (
-    progName = "owm_exporter"
+	progName = "owm_exporter"
 )
 
 var (
-    webConfig = webflag.AddFlags(kingpin.CommandLine, ":9111")
+	webConfig = webflag.AddFlags(kingpin.CommandLine, ":9111")
 
-    metricPath = kingpin.Flag(
-        "web.telemetry-path",
-        "Path under which to expose metrics.",
-    ).Default("/metrics").String()
+	metricPath = kingpin.Flag(
+		"web.telemetry-path",
+		"Path under which to expose metrics.",
+	).Default("/metrics").String()
 
-    configFile = kingpin.Flag(
-        "config.file",
-        "Path to YAML file with configuration",
-    ).Default("config.yaml").String()
+	configFile = kingpin.Flag(
+		"config.file",
+		"Path to YAML file with configuration",
+	).Default("config.yaml").String()
 )
 
 func init() {
-    prometheus.MustRegister(version.NewCollector(progName))
+	prometheus.MustRegister(version.NewCollector(progName))
 }
 
 func newHandler(config *Config, logger log.Logger, exporterMetrics ExporterMetrics) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        ctx := r.Context()
-        registry := prometheus.NewRegistry()
-        registry.MustRegister(NewExporter(ctx, config, logger, exporterMetrics))
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		registry := prometheus.NewRegistry()
+		registry.MustRegister(NewExporter(ctx, config, logger, exporterMetrics))
 
-        gatherers := prometheus.Gatherers{
-            prometheus.DefaultGatherer,
-            registry,
-        }
-        h := promhttp.HandlerFor(gatherers, promhttp.HandlerOpts{})
-        h.ServeHTTP(w, r)
-    }
+		gatherers := prometheus.Gatherers{
+			prometheus.DefaultGatherer,
+			registry,
+		}
+		h := promhttp.HandlerFor(gatherers, promhttp.HandlerOpts{})
+		h.ServeHTTP(w, r)
+	}
 }
 
 func main() {
-    promlogConfig := &promlog.Config{}
-    flag.AddFlags(kingpin.CommandLine, promlogConfig)
-    kingpin.Version(version.Print(progName))
-    kingpin.HelpFlag.Short('h')
-    kingpin.Parse()
+	promlogConfig := &promlog.Config{}
+	flag.AddFlags(kingpin.CommandLine, promlogConfig)
+	kingpin.Version(version.Print(progName))
+	kingpin.HelpFlag.Short('h')
+	kingpin.Parse()
 
-    logger := promlog.New(promlogConfig)
-    //nolint:errcheck
-    level.Info(logger).Log("msg", fmt.Sprintf("Starting %s", progName),
-        "version", version.Info(),
-        "config", *configFile)
+	logger := promlog.New(promlogConfig)
+	//nolint:errcheck
+	level.Info(logger).Log("msg", fmt.Sprintf("Starting %s", progName),
+		"version", version.Info(),
+		"config", *configFile)
 
-    config, err := LoadConfig(*configFile)
+	config, err := LoadConfig(*configFile)
 
-    if err != nil {
-        //nolint:errcheck
-        level.Error(logger).Log("msg", "Error reading configuration", "err", err)
-        os.Exit(1)
-    }
+	if err != nil {
+		//nolint:errcheck
+		level.Error(logger).Log("msg", "Error reading configuration", "err", err)
+		os.Exit(1)
+	}
 
-    //nolint:errcheck
-    level.Info(logger).Log("msg", fmt.Sprintf("Got %d targets", len(config.Targets)))
+	//nolint:errcheck
+	level.Info(logger).Log("msg", fmt.Sprintf("Got %d targets", len(config.Targets)))
 
-    var landingPage = []byte(`<html>
+	var landingPage = []byte(`<html>
 <head><title>OWM exporter</title></head>
 <body>
 <h1>OWM exporter</h1>
@@ -102,19 +102,19 @@ func main() {
 </html>
 `)
 
-    handlerFunc := newHandler(config, logger, NewExporterMetrics())
-    http.Handle(*metricPath, promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, handlerFunc))
-    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        if _, err = w.Write(landingPage); err != nil {
-            //nolint:errcheck
-            level.Error(logger).Log("msg", "Unable to write page content", "err", err)
-        }
-    })
+	handlerFunc := newHandler(config, logger, NewExporterMetrics())
+	http.Handle(*metricPath, promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, handlerFunc))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if _, err = w.Write(landingPage); err != nil {
+			//nolint:errcheck
+			level.Error(logger).Log("msg", "Unable to write page content", "err", err)
+		}
+	})
 
-    srv := &http.Server{}
-    if err := web.ListenAndServe(srv, webConfig, logger); err != nil {
-        //nolint:errcheck
-        level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
-        os.Exit(1)
-    }
+	srv := &http.Server{}
+	if err := web.ListenAndServe(srv, webConfig, logger); err != nil {
+		//nolint:errcheck
+		level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
+		os.Exit(1)
+	}
 }
