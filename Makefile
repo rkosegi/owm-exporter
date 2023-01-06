@@ -24,8 +24,10 @@ VER_NEXT    := $(VER_MAJOR).$(VER_MINOR).$(shell echo $$(($(VER_PATCH)+1)))
 bump-version:
 	@echo Current: $(VER_CURRENT)
 	@echo Next: $(VER_NEXT)
-	sed -i 's/^IMAGE_TAG := .*/IMAGE_TAG   := "$(VER_NEXT)"/g' Makefile
-	git add Makefile
+	sed -i 's/^IMAGE_TAG   := .*/IMAGE_TAG   := "$(VER_NEXT)"/g' Makefile
+	sed -i 's/^appVersion: .*/appVersion: $(VER_NEXT)/g' chart/Chart.yaml
+	sed -i 's/^version: .*/version: $(VER_NEXT)/g' chart/Chart.yaml
+	git add Makefile chart/Chart.yaml
 	git commit -sm "Bump version to $(VER_NEXT)"
 
 tag-version:
