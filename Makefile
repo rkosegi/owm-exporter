@@ -12,8 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-IMAGE_NAME := "rkosegi/owm-exporter"
-IMAGE_TAG := "1.0.0"
+IMAGE_NAME  := "rkosegi/owm-exporter"
+IMAGE_TAG   := "1.0.1"
+VER_CURRENT := $(shell git describe --match "v*" --abbrev=0 --tags | sed -Ee 's/^v|-.*//')
+VER_PARTS   := $(subst ., ,$(VER_CURRENT))
+VER_MAJOR	:= $(word 1,$(VER_PARTS))
+VER_MINOR   := $(word 2,$(VER_PARTS))
+VER_PATCH   := $(word 3,$(VER_PARTS))
+VER_NEXT    := $(VER_MAJOR).$(VER_MINOR).$(shell echo $$(($(VER_PATCH)+1)))
+
+bump-version:
+	@echo Current: $(VER_CURRENT)
+	@echo Next: $(VER_NEXT)
+	sed -i 's/^IMAGE_TAG := .*/IMAGE_TAG   := "$(VER_NEXT)"/g' Makefile
+	git add Makefile
+	git commit -sm "Bump version to $(VER_NEXT)"
+
+tag-version:
+	git tag -am "Release $(VER_NEXT)" v$(VER_NEXT)
 
 build-docker:
 	docker build -t "$(IMAGE_NAME):$(IMAGE_TAG)" .
