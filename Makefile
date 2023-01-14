@@ -36,8 +36,13 @@ tag-version:
 build-docker:
 	docker build -t "$(IMAGE_NAME):$(IMAGE_TAG)" .
 
+push-docker:
+	docker push $(IMAGE_NAME):$(IMAGE_TAG)
+
 build-local:
 	go fmt
 	go mod download
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o owm-exporter . ; strip owm-exporter
+
+release: build-docker push-docker bump-version
 
