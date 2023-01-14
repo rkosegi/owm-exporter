@@ -1,3 +1,4 @@
+{{- if .Values.serviceMonitor.enabled -}}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -11,3 +12,4 @@ spec:
       {{- include "exporter.selectorLabels" . | nindent 6 }}
   endpoints:
     - port: metrics
+  {{- end }}

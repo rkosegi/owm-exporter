@@ -48,7 +48,7 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - mountPath: /config.yaml
-              name: {{ include "exporter.fullname" . }}
+              name: config
               subPath: config.yaml
       {{- with .Values.nodeSelector }}
       nodeSelector:

@@ -77,20 +77,17 @@ func main() {
 	kingpin.Parse()
 
 	logger := promlog.New(promlogConfig)
-	//nolint:errcheck
 	level.Info(logger).Log("msg", fmt.Sprintf("Starting %s", progName),
 		"version", version.Info(),
 		"config", *configFile)
 
-	config, err := LoadConfig(*configFile)
+	config, err := loadConfig(*configFile)
 
 	if err != nil {
-		//nolint:errcheck
 		level.Error(logger).Log("msg", "Error reading configuration", "err", err)
 		os.Exit(1)
 	}
 
-	//nolint:errcheck
 	level.Info(logger).Log("msg", fmt.Sprintf("Got %d targets", len(config.Targets)))
 
 	var landingPage = []byte(`<html>
@@ -106,14 +103,12 @@ func main() {
 	http.Handle(*metricPath, promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, handlerFunc))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if _, err = w.Write(landingPage); err != nil {
-			//nolint:errcheck
 			level.Error(logger).Log("msg", "Unable to write page content", "err", err)
 		}
 	})
 
 	srv := &http.Server{}
 	if err := web.ListenAndServe(srv, webConfig, logger); err != nil {
-		//nolint:errcheck
 		level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
 		os.Exit(1)
 	}

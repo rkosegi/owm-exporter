@@ -97,12 +97,10 @@ func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) {
 	e.metrics.Error.Set(0)
 
 	for _, target := range e.config.Targets {
-		//nolint:errcheck
 		level.Debug(e.logger).Log("msg", "Processing target", "target", target.Name)
 
 		resp, err := e.client.Fetch(ctx, target, e.logger)
 		if err != nil {
-			//nolint:errcheck
 			level.Error(e.logger).Log("msg", "Error while fetching current conditions",
 				"name", target.Name, "err", err)
 			e.metrics.ScrapeErrors.WithLabelValues("collect.current." + target.Name).Inc()

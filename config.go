@@ -19,7 +19,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func LoadConfig(configFile string) (*Config, error) {
+func loadConfig(configFile string) (*Config, error) {
 	var cfg = &Config{}
 
 	file, err := os.Open(configFile)
