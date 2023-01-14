@@ -13,7 +13,7 @@
 # limitations under the License.
 
 IMAGE_NAME  := "rkosegi/owm-exporter"
-IMAGE_TAG   := "1.0.2"
+IMAGE_TAG   := "1.0.3"
 VER_CURRENT := $(shell git describe --match "v*" --abbrev=0 --tags | sed -Ee 's/^v|-.*//')
 VER_PARTS   := $(subst ., ,$(VER_CURRENT))
 VER_MAJOR	:= $(word 1,$(VER_PARTS))
