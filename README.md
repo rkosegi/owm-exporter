@@ -27,7 +27,7 @@ Here is example `config.yaml`:
 
 ```yaml
 ---
-apiToken: 12345678998765432345678
+apiKey: 12345678998765432345678
 targets:
   - name: Vienna
     lat: 48.2082
