@@ -49,6 +49,17 @@ type ApiResponse struct {
 		Speed     float32 `json:"speed"`
 		Direction int     `json:"deg"`
 	} `json:"wind"`
+	Rain *struct {
+		OneHourVolume    *float32 `json:"1h"`
+		ThreeHoursVolume *float32 `json:"3h"`
+	} `json:"rain"`
+	Snow *struct {
+		OneHourVolume    *float32 `json:"1h"`
+		ThreeHoursVolume *float32 `json:"3h"`
+	} `json:"snow"`
+	Clouds *struct {
+		All *float32 `json:"all"`
+	} `json:"clouds"`
 	Name string `json:"name"`
 }
 

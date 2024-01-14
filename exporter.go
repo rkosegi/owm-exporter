@@ -66,6 +66,31 @@ var (
 		prometheus.BuildFQName(namespace, "current", "wind_direction"),
 		"The current wind direction in degrees.",
 		[]string{"location"}, nil)
+
+	currentCloudsDirectionDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "clouds"),
+		"The current cloudiness in percent.",
+		[]string{"location"}, nil)
+
+	currentRain1hVolumeDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "rain_1h"),
+		"Rain volume for the last 1 hour, in millimeters.",
+		[]string{"location"}, nil)
+
+	currentRain3hVolumeDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "rain_3h"),
+		"Rain volume for the last 3 hours, in millimeters.",
+		[]string{"location"}, nil)
+
+	currentSnow1hVolumeDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "snow_1h"),
+		"Snow volume for the last 1 hour, in millimeters.",
+		[]string{"location"}, nil)
+
+	currentSnow3hVolumeDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "current", "snow_3h"),
+		"Snow volume for the last 3 hours, in millimeters.",
+		[]string{"location"}, nil)
 )
 
 type Exporter struct {
@@ -122,6 +147,30 @@ func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) {
 				prometheus.GaugeValue, float64(resp.Wind.Speed), target.Name)
 			ch <- prometheus.MustNewConstMetric(currentWindDirectionDesc,
 				prometheus.GaugeValue, float64(resp.Wind.Direction), target.Name)
+			if resp.Clouds != nil && resp.Clouds.All != nil {
+				ch <- prometheus.MustNewConstMetric(currentCloudsDirectionDesc,
+					prometheus.GaugeValue, float64(*resp.Clouds.All), target.Name)
+			}
+			if resp.Snow != nil {
+				if resp.Snow.OneHourVolume != nil {
+					ch <- prometheus.MustNewConstMetric(currentSnow1hVolumeDesc,
+						prometheus.GaugeValue, float64(*resp.Snow.OneHourVolume), target.Name)
+				}
+				if resp.Snow.ThreeHoursVolume != nil {
+					ch <- prometheus.MustNewConstMetric(currentSnow3hVolumeDesc,
+						prometheus.GaugeValue, float64(*resp.Snow.ThreeHoursVolume), target.Name)
+				}
+			}
+			if resp.Rain != nil {
+				if resp.Rain.OneHourVolume != nil {
+					ch <- prometheus.MustNewConstMetric(currentRain1hVolumeDesc,
+						prometheus.GaugeValue, float64(*resp.Rain.OneHourVolume), target.Name)
+				}
+				if resp.Rain.ThreeHoursVolume != nil {
+					ch <- prometheus.MustNewConstMetric(currentRain3hVolumeDesc,
+						prometheus.GaugeValue, float64(*resp.Rain.ThreeHoursVolume), target.Name)
+				}
+			}
 		}
 	}
 }
