@@ -53,11 +53,10 @@ func init() {
 	prometheus.MustRegister(version.NewCollector(progName))
 }
 
-func newHandler(config *Config, logger log.Logger, exporterMetrics ExporterMetrics) http.HandlerFunc {
+func newHandler(config *Config, logger log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
 		registry := prometheus.NewRegistry()
-		registry.MustRegister(NewExporter(ctx, config, logger, exporterMetrics))
+		registry.MustRegister(NewExporter(config, logger))
 
 		gatherers := prometheus.Gatherers{
 			prometheus.DefaultGatherer,
@@ -98,7 +97,7 @@ func main() {
 </html>
 `)
 
-	handlerFunc := newHandler(config, logger, NewExporterMetrics())
+	handlerFunc := newHandler(config, logger)
 	http.Handle(*metricPath, promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, handlerFunc))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if _, err = w.Write(landingPage); err != nil {

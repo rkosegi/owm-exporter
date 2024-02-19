@@ -13,20 +13,32 @@
 
 package main
 
-import "github.com/prometheus/client_golang/prometheus"
-
-type ExporterMetrics struct {
-	TotalScrapes prometheus.Counter
-	ScrapeErrors *prometheus.CounterVec
-	ApiRequests  *prometheus.CounterVec
-	Error        prometheus.Gauge
-}
+import (
+	owm "github.com/briandowns/openweathermap"
+	"time"
+)
 
 type Target struct {
-	Latitude  string `yaml:"lat"`
-	Longitude string `yaml:"lon"`
-	Interval  int    `yaml:"interval"`
-	Name      string `yaml:"name"`
+	Latitude  float64 `yaml:"lat"`
+	Longitude float64 `yaml:"lon"`
+	// in seconds
+	Interval float64 `yaml:"interval"`
+	Name     string  `yaml:"name"`
+}
+
+type ApiResponse struct {
+	Main       owm.Main   `json:"main"`
+	Visibility int        `json:"visibility"`
+	Wind       owm.Wind   `json:"wind"`
+	Rain       owm.Rain   `json:"rain"`
+	Snow       owm.Snow   `json:"snow"`
+	Clouds     owm.Clouds `json:"clouds"`
+	Name       string     `json:"name"`
+}
+
+type CacheEntry struct {
+	lastResponse *ApiResponse
+	lastUpdated  time.Time
 }
 
 type Config struct {

@@ -15,10 +15,12 @@ package main
 
 import (
 	"context"
-
+	owm "github.com/briandowns/openweathermap"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/prometheus/client_golang/prometheus"
+	prom "github.com/prometheus/client_golang/prometheus"
+	"sync"
+	"time"
 )
 
 const (
@@ -27,186 +29,219 @@ const (
 )
 
 var (
-	currentTemperatureDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "temperature"),
+	currentTemperatureDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "temperature"),
 		"The current temperature.",
 		[]string{"location"}, nil)
 
-	currentTemperatureMinDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "temperature_min"),
+	currentTemperatureMinDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "temperature_min"),
 		"The minimal currently observed temperature.",
 		[]string{"location"}, nil)
 
-	currentTemperatureMaxDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "temperature_max"),
+	currentTemperatureMaxDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "temperature_max"),
 		"The maximal currently observed temperature.",
 		[]string{"location"}, nil)
 
-	currentTemperatureFeelDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "temperature_feel"),
+	currentTemperatureFeelDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "temperature_feel"),
 		"The current temperature feel like.",
 		[]string{"location"}, nil)
 
-	currentHumidityDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "humidity"),
+	currentHumidityDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "humidity"),
 		"The current humidity.",
 		[]string{"location"}, nil)
 
-	currentPressureDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "pressure"),
+	currentPressureDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "pressure"),
 		"The current atmospheric pressure.",
 		[]string{"location"}, nil)
 
-	currentWindSpeedDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "wind_speed"),
+	currentWindSpeedDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "wind_speed"),
 		"The current wind speed.",
 		[]string{"location"}, nil)
 
-	currentWindDirectionDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "wind_direction"),
+	currentWindDirectionDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "wind_direction"),
 		"The current wind direction in degrees.",
 		[]string{"location"}, nil)
 
-	currentCloudsDirectionDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "clouds"),
+	currentCloudsDirectionDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "clouds"),
 		"The current cloudiness in percent.",
 		[]string{"location"}, nil)
 
-	currentRain1hVolumeDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "rain_1h"),
+	currentRain1hVolumeDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "rain_1h"),
 		"Rain volume for the last 1 hour, in millimeters.",
 		[]string{"location"}, nil)
 
-	currentRain3hVolumeDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "rain_3h"),
+	currentRain3hVolumeDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "rain_3h"),
 		"Rain volume for the last 3 hours, in millimeters.",
 		[]string{"location"}, nil)
 
-	currentSnow1hVolumeDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "snow_1h"),
+	currentSnow1hVolumeDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "snow_1h"),
 		"Snow volume for the last 1 hour, in millimeters.",
 		[]string{"location"}, nil)
 
-	currentSnow3hVolumeDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "current", "snow_3h"),
+	currentSnow3hVolumeDesc = prom.NewDesc(
+		prom.BuildFQName(namespace, "current", "snow_3h"),
 		"Snow volume for the last 3 hours, in millimeters.",
 		[]string{"location"}, nil)
 )
 
 type Exporter struct {
-	ctx     context.Context
-	logger  log.Logger
-	config  *Config
-	metrics ExporterMetrics
-	client  OwmClient
+	lock         sync.Mutex
+	cache        map[string]CacheEntry
+	ctx          context.Context
+	logger       log.Logger
+	config       *Config
+	totalScrapes prom.Summary
+	apiRequests  *prom.CounterVec
+	scrapeErrors *prom.CounterVec
+	error        prom.Gauge
+	cacheHit     *prom.CounterVec
 }
 
-func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
-	ch <- e.metrics.TotalScrapes.Desc()
-	ch <- e.metrics.Error.Desc()
-	e.metrics.ScrapeErrors.Describe(ch)
+func (e *Exporter) Describe(ch chan<- *prom.Desc) {
+	ch <- e.totalScrapes.Desc()
+	ch <- e.error.Desc()
+	e.apiRequests.Describe(ch)
+	e.cacheHit.Describe(ch)
+	e.scrapeErrors.Describe(ch)
 }
 
-func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	e.scrape(e.ctx, ch)
+func (e *Exporter) Collect(ch chan<- prom.Metric) {
+	e.scrape(ch)
 
-	ch <- e.metrics.TotalScrapes
-	ch <- e.metrics.Error
-
-	e.metrics.ScrapeErrors.Collect(ch)
-	e.metrics.ApiRequests.Collect(ch)
+	ch <- e.totalScrapes
+	ch <- e.error
+	e.scrapeErrors.Collect(ch)
+	e.apiRequests.Collect(ch)
+	e.cacheHit.Collect(ch)
 }
 
-func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) {
-	e.metrics.TotalScrapes.Inc()
-	e.metrics.Error.Set(0)
+func (e *Exporter) scrape(ch chan<- prom.Metric) {
+	start := time.Now()
+	defer e.totalScrapes.Observe(time.Since(start).Seconds())
+	e.error.Set(0)
 
 	for _, target := range e.config.Targets {
 		level.Debug(e.logger).Log("msg", "Processing target", "target", target.Name)
 
-		resp, err := e.client.Fetch(ctx, target, e.logger)
+		resp, err := e.FetchTarget(target)
 		if err != nil {
-			level.Error(e.logger).Log("msg", "Error while fetching current conditions",
-				"name", target.Name, "err", err)
-			e.metrics.ScrapeErrors.WithLabelValues("collect.current." + target.Name).Inc()
-			e.metrics.Error.Set(1)
+			level.Error(e.logger).Log("msg", "Error while fetching current conditions", "name", target.Name, "err", err)
+			e.scrapeErrors.WithLabelValues("collect.current." + target.Name).Inc()
+			e.error.Set(1)
 		} else {
-			ch <- prometheus.MustNewConstMetric(currentTemperatureDesc,
-				prometheus.GaugeValue, float64(resp.Main.Temp), target.Name)
-			ch <- prometheus.MustNewConstMetric(currentTemperatureMinDesc,
-				prometheus.GaugeValue, float64(resp.Main.TempMin), target.Name)
-			ch <- prometheus.MustNewConstMetric(currentTemperatureMaxDesc,
-				prometheus.GaugeValue, float64(resp.Main.TempMax), target.Name)
-			ch <- prometheus.MustNewConstMetric(currentTemperatureFeelDesc,
-				prometheus.GaugeValue, float64(resp.Main.TempFeel), target.Name)
-			ch <- prometheus.MustNewConstMetric(currentHumidityDesc,
-				prometheus.GaugeValue, float64(resp.Main.Humidity), target.Name)
-			ch <- prometheus.MustNewConstMetric(currentPressureDesc,
-				prometheus.GaugeValue, float64(resp.Main.Pressure), target.Name)
-			ch <- prometheus.MustNewConstMetric(currentWindSpeedDesc,
-				prometheus.GaugeValue, float64(resp.Wind.Speed), target.Name)
-			ch <- prometheus.MustNewConstMetric(currentWindDirectionDesc,
-				prometheus.GaugeValue, float64(resp.Wind.Direction), target.Name)
-			if resp.Clouds != nil && resp.Clouds.All != nil {
-				ch <- prometheus.MustNewConstMetric(currentCloudsDirectionDesc,
-					prometheus.GaugeValue, float64(*resp.Clouds.All), target.Name)
+			ch <- prom.MustNewConstMetric(currentTemperatureDesc, prom.GaugeValue, resp.Main.Temp, target.Name)
+			ch <- prom.MustNewConstMetric(currentTemperatureMinDesc, prom.GaugeValue, resp.Main.TempMin, target.Name)
+			ch <- prom.MustNewConstMetric(currentTemperatureMaxDesc, prom.GaugeValue, resp.Main.TempMax, target.Name)
+			ch <- prom.MustNewConstMetric(currentTemperatureFeelDesc, prom.GaugeValue, resp.Main.FeelsLike, target.Name)
+			ch <- prom.MustNewConstMetric(currentHumidityDesc, prom.GaugeValue, float64(resp.Main.Humidity), target.Name)
+			ch <- prom.MustNewConstMetric(currentPressureDesc, prom.GaugeValue, resp.Main.Pressure, target.Name)
+			ch <- prom.MustNewConstMetric(currentWindSpeedDesc, prom.GaugeValue, resp.Wind.Speed, target.Name)
+			ch <- prom.MustNewConstMetric(currentWindDirectionDesc, prom.GaugeValue, resp.Wind.Deg, target.Name)
+			if resp.Clouds.All != 0 {
+				ch <- prom.MustNewConstMetric(currentCloudsDirectionDesc, prom.GaugeValue, float64(resp.Clouds.All), target.Name)
 			}
-			if resp.Snow != nil {
-				if resp.Snow.OneHourVolume != nil {
-					ch <- prometheus.MustNewConstMetric(currentSnow1hVolumeDesc,
-						prometheus.GaugeValue, float64(*resp.Snow.OneHourVolume), target.Name)
-				}
-				if resp.Snow.ThreeHoursVolume != nil {
-					ch <- prometheus.MustNewConstMetric(currentSnow3hVolumeDesc,
-						prometheus.GaugeValue, float64(*resp.Snow.ThreeHoursVolume), target.Name)
-				}
+			if resp.Snow.OneH != 0 {
+				ch <- prom.MustNewConstMetric(currentSnow1hVolumeDesc, prom.GaugeValue, resp.Snow.OneH, target.Name)
 			}
-			if resp.Rain != nil {
-				if resp.Rain.OneHourVolume != nil {
-					ch <- prometheus.MustNewConstMetric(currentRain1hVolumeDesc,
-						prometheus.GaugeValue, float64(*resp.Rain.OneHourVolume), target.Name)
-				}
-				if resp.Rain.ThreeHoursVolume != nil {
-					ch <- prometheus.MustNewConstMetric(currentRain3hVolumeDesc,
-						prometheus.GaugeValue, float64(*resp.Rain.ThreeHoursVolume), target.Name)
-				}
+			if resp.Snow.ThreeH != 0 {
+				ch <- prom.MustNewConstMetric(currentSnow3hVolumeDesc, prom.GaugeValue, resp.Snow.ThreeH, target.Name)
+			}
+			if resp.Rain.OneH != 0 {
+				ch <- prom.MustNewConstMetric(currentRain1hVolumeDesc, prom.GaugeValue, resp.Rain.OneH, target.Name)
+			}
+			if resp.Rain.ThreeH != 0 {
+				ch <- prom.MustNewConstMetric(currentRain3hVolumeDesc, prom.GaugeValue, resp.Rain.ThreeH, target.Name)
 			}
 		}
 	}
 }
 
-func NewExporter(ctx context.Context, config *Config, logger log.Logger,
-	exporterMetrics ExporterMetrics) *Exporter {
-	return &Exporter{
-		ctx:     ctx,
-		logger:  logger,
-		config:  config,
-		metrics: exporterMetrics,
-		client:  NewClient(config.ApiKey, exporterMetrics),
+func (e *Exporter) responseFromCache(tgt Target) *ApiResponse {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	entry, present := e.cache[tgt.Name]
+	if present && time.Now().Unix() < int64(tgt.Interval)+entry.lastUpdated.Unix() {
+		e.cacheHit.WithLabelValues(tgt.Name).Inc()
+		return entry.lastResponse
 	}
+	return nil
 }
 
-func NewExporterMetrics() ExporterMetrics {
-	return ExporterMetrics{
-		TotalScrapes: prometheus.NewCounter(prometheus.CounterOpts{
+func (e *Exporter) FetchTarget(target Target) (*ApiResponse, error) {
+	if fromCache := e.responseFromCache(target); fromCache != nil {
+		return fromCache, nil
+	}
+	oc, err := owm.NewCurrent("C", "EN", e.config.ApiKey)
+	if err != nil {
+		return nil, err
+	}
+	err = oc.CurrentByCoordinates(&owm.Coordinates{
+		Longitude: target.Longitude,
+		Latitude:  target.Latitude,
+	})
+	e.apiRequests.WithLabelValues(target.Name).Inc()
+	if err != nil {
+		return nil, err
+	}
+	resp := &ApiResponse{
+		Main:       oc.Main,
+		Wind:       oc.Wind,
+		Visibility: oc.Visibility,
+		Rain:       oc.Rain,
+		Snow:       oc.Snow,
+		Clouds:     oc.Clouds,
+		Name:       oc.Name,
+	}
+	e.lock.Lock()
+	e.cache[target.Name] = CacheEntry{
+		lastResponse: resp,
+		lastUpdated:  time.Now(),
+	}
+	e.lock.Unlock()
+	return resp, nil
+}
+
+func NewExporter(config *Config, logger log.Logger) *Exporter {
+	return &Exporter{
+		logger: logger,
+		config: config,
+		cache:  map[string]CacheEntry{},
+		totalScrapes: prom.NewSummary(prom.SummaryOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "scrapes_total",
 			Help:      "Total number of times OWM was scraped for metrics.",
 		}),
-		ApiRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
+		apiRequests: prom.NewCounterVec(prom.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "api_requests",
 			Help:      "Total number of API requests for given location.",
 		}, []string{"location"}),
-		ScrapeErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
+		cacheHit: prom.NewCounterVec(prom.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "cache_hit",
+			Help:      "Total number of cache hits for given location.",
+		}, []string{"location"}),
+		scrapeErrors: prom.NewCounterVec(prom.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "scrape_errors_total",
 			Help:      "Total number of times an error occurred scraping a OWM.",
 		}, []string{"collector"}),
-		Error: prometheus.NewGauge(prometheus.GaugeOpts{
+		error: prom.NewGauge(prom.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "last_scrape_error",

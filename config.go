@@ -20,20 +20,14 @@ import (
 )
 
 func loadConfig(configFile string) (*Config, error) {
-	var cfg = &Config{}
-
-	file, err := os.Open(configFile)
+	var cfg Config
+	data, err := os.ReadFile(configFile)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-
-	d := yaml.NewDecoder(file)
-	d.SetStrict(true)
-
-	if err := d.Decode(&cfg); err != nil {
+	err = yaml.Unmarshal(data, &cfg)
+	if err != nil {
 		return nil, err
 	}
-
-	return cfg, nil
+	return &cfg, nil
 }
