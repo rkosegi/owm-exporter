@@ -12,37 +12,65 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-IMAGE_NAME  := "rkosegi/owm-exporter"
-IMAGE_TAG   := "1.0.4"
-VER_CURRENT := $(shell git tag --sort=v:refname | tail -1 | sed -Ee 's/^v|-.*//')
-VER_PARTS   := $(subst ., ,$(VER_CURRENT))
-VER_MAJOR	:= $(word 1,$(VER_PARTS))
-VER_MINOR   := $(word 2,$(VER_PARTS))
-VER_PATCH   := $(word 3,$(VER_PARTS))
-VER_NEXT    := $(VER_MAJOR).$(VER_MINOR).$(shell echo $$(($(VER_PATCH)+1)))
+REGISTRY    	?= ghcr.io/rkosegi
+DOCKER      	?= docker
+IMAGE_NAME  	:= $(REGISTRY)"/owm-exporter"
+VERSION 		:= $(shell cat VERSION)
+VER_PARTS   	:= $(subst ., ,$(VERSION))
+VER_MAJOR		:= $(word 1,$(VER_PARTS))
+VER_MINOR   	:= $(word 2,$(VER_PARTS))
+VER_PATCH   	:= $(word 3,$(VER_PARTS))
+VER_NEXT_PATCH  := $(VER_MAJOR).$(VER_MINOR).$(shell echo $$(($(VER_PATCH)+1)))
+BUILD_DATE  	:= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
+GIT_COMMIT  	?= $(shell git rev-parse --short HEAD)
+BRANCH      	?= $(strip $(shell git rev-parse --abbrev-ref HEAD))
+PKG         	:= github.com/prometheus/common
+ARCH        	?= $(shell go env GOARCH)
+OS          	?= $(shell uname -s | tr A-Z a-z)
+LDFLAGS			= -s -w
+LDFLAGS			+= -X ${PKG}/version.Version=v${VERSION}
+LDFLAGS			+= -X ${PKG}/version.Revision=${GIT_COMMIT}
+LDFLAGS			+= -X ${PKG}/version.Branch=${BRANCH}
+LDFLAGS			+= -X ${PKG}/version.BuildUser=$(shell id -u -n)@$(shell hostname)
+LDFLAGS			+= -X ${PKG}/version.BuildDate=${BUILD_DATE}
 
-bump-version:
-	@echo Current: $(VER_CURRENT)
-	@echo Next: $(VER_NEXT)
-	sed -i 's/^IMAGE_TAG   := .*/IMAGE_TAG   := "$(VER_NEXT)"/g' Makefile
-	sed -i 's/^appVersion: .*/appVersion: $(VER_NEXT)/g' chart/Chart.yaml
-	sed -i 's/^version: .*/version: $(VER_NEXT)/g' chart/Chart.yaml
-	git add Makefile chart/Chart.yaml
-	git commit -sm "Bump version to $(VER_NEXT)"
+.DEFAULT_GOAL := build-local
 
-tag-version:
-	git tag -am "Release $(VER_NEXT)" v$(VER_NEXT)
+bump-patch-version:
+	@echo Current: $(VERSION)
+	@echo Next: $(VER_NEXT_PATCH)
+	sed -i 's/^VERSION   := .*/VERSION   := "$(VER_NEXT_PATCH)"/g' Makefile
+	sed -i 's/^appVersion: .*/appVersion: $(VER_NEXT_PATCH)/g' chart/Chart.yaml
+	sed -i 's/^version: .*/version: $(VER_NEXT_PATCH)/g' chart/Chart.yaml
+	git add -- VERSION Makefile chart/Chart.yaml
+	git commit -sm "Bump version to $(VER_NEXT_PATCH)"
+
+git-tag:
+	git tag -am "Release $(VERSION)" $(VERSION)
+
+git-push-tag:
+	git push --tags
+
+new-release: bump-patch-version git-tag
 
 build-docker:
-	docker build -t "$(IMAGE_NAME):$(IMAGE_TAG)" .
+	docker build -t "$(IMAGE_NAME):$(VERSION)" \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		.
 
 push-docker:
-	docker push $(IMAGE_NAME):$(IMAGE_TAG)
+	docker push $(IMAGE_NAME):$(VERSION)
 
 build-local:
 	go fmt
-	go mod download
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o owm-exporter . ; strip owm-exporter
+	go mod tidy
+	GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o exporter
 
-release: build-docker push-docker bump-version
+lint:
+	pre-commit run --all-files
+
+test:
+	go test -v ./...
 

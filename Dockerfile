@@ -14,24 +14,33 @@
 
 FROM golang:1.21 as builder
 
-WORKDIR /workspace
-COPY go.mod go.mod
-COPY go.sum go.sum
-RUN go mod download
+WORKDIR /build
+COPY . /build
 
-COPY main.go main.go
-COPY config.go config.go
-COPY client.go client.go
-COPY types.go types.go
-COPY exporter.go exporter.go
-
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o owm-exporter . ; strip owm-exporter
+RUN make build-local
 
 FROM gcr.io/distroless/static:nonroot
+
+ARG VERSION
+ARG BUILD_DATE
+ARG GIT_COMMIT
+
 WORKDIR /
-COPY --from=builder /workspace/owm-exporter /
+COPY --from=builder /build/exporter /
+
+LABEL org.opencontainers.image.url="https://github.com/rkosegi/owm-exporter" \
+      org.opencontainers.image.documentation="https://github.com/rkosegi/owm-exporter/blob/main/README.md" \
+      org.opencontainers.image.source="https://github.com/rkosegi/owm-exporter.git" \
+      org.opencontainers.image.title="OpenweatherMap exporter" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.vendor="rkosegi" \
+      org.opencontainers.image.description="Prometheus exporter for openweathermap.org" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.version="${VERSION}"
+
 USER 65532:65532
 
 EXPOSE 9111
 
-ENTRYPOINT ["/owm-exporter"]
+ENTRYPOINT ["/exporter"]
