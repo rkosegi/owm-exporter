@@ -39,10 +39,10 @@ LDFLAGS			+= -X ${PKG}/version.BuildDate=${BUILD_DATE}
 bump-patch-version:
 	@echo Current: $(VERSION)
 	@echo Next: $(VER_NEXT_PATCH)
-	sed -i 's/^VERSION   := .*/VERSION   := "$(VER_NEXT_PATCH)"/g' Makefile
+	@echo "$(VER_NEXT_PATCH)" > VERSION
 	sed -i 's/^appVersion: .*/appVersion: $(VER_NEXT_PATCH)/g' chart/Chart.yaml
 	sed -i 's/^version: .*/version: $(VER_NEXT_PATCH)/g' chart/Chart.yaml
-	git add -- VERSION Makefile chart/Chart.yaml
+	git add -- VERSION chart/Chart.yaml
 	git commit -sm "Bump version to $(VER_NEXT_PATCH)"
 
 git-tag:
