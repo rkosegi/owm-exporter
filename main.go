@@ -15,6 +15,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus/collectors/version"
 	"net/http"
 	"os"
 
@@ -25,7 +26,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
-	"github.com/prometheus/common/version"
+	pv "github.com/prometheus/common/version"
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 
 	"github.com/prometheus/exporter-toolkit/web"
@@ -70,13 +71,13 @@ func newHandler(config *Config, logger log.Logger) http.HandlerFunc {
 func main() {
 	promlogConfig := &promlog.Config{}
 	flag.AddFlags(kingpin.CommandLine, promlogConfig)
-	kingpin.Version(version.Print(progName))
+	kingpin.Version(pv.Print(progName))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
 	logger := promlog.New(promlogConfig)
 	level.Info(logger).Log("msg", fmt.Sprintf("Starting %s", progName),
-		"version", version.Info(),
+		"version", pv.Info(),
 		"config", *configFile)
 
 	config, err := loadConfig(*configFile)
