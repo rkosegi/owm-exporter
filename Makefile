@@ -53,6 +53,12 @@ git-push-tag:
 
 new-release: bump-patch-version git-tag
 
+update-go-deps:
+	@for m in $$(go list -mod=readonly -m -f '{{ if and (not .Indirect) (not .Main)}}{{.Path}}{{end}}' all); do \
+		go get -d $$m; \
+	done
+	go mod tidy
+
 build-docker:
 	docker build -t "$(IMAGE_NAME):v$(VERSION)" \
 		--build-arg VERSION=$(VERSION) \
