@@ -111,7 +111,7 @@ func main() {
 	}
 	landingPage, err := web.NewLandingPage(web.LandingConfig{
 		Name:        strings.ReplaceAll(progName, "_", " "),
-		Description: "Prometheus exporter for www.openweatherman.org",
+		Description: "Prometheus exporter for www.openweathermap.org",
 		Version:     pv.Info(),
 		Links: []web.LandingLinks{
 			{
