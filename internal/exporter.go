@@ -1,17 +1,21 @@
-// Copyright 2021 Richard Kosegi
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * Copyright 2024 Richard Kosegi
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
-package main
+package internal
 
 import (
 	"context"
@@ -19,6 +23,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	prom "github.com/prometheus/client_golang/prometheus"
+	"github.com/rkosegi/owm-exporter/types"
 	"sync"
 	"time"
 )
@@ -95,12 +100,12 @@ var (
 		[]string{"location"}, nil)
 )
 
-type Exporter struct {
+type exporter struct {
 	lock         sync.Mutex
-	cache        map[string]CacheEntry
+	cache        map[string]types.CacheEntry
 	ctx          context.Context
 	logger       log.Logger
-	config       *Config
+	config       *types.Config
 	totalScrapes prom.Summary
 	apiRequests  *prom.CounterVec
 	scrapeErrors *prom.CounterVec
@@ -108,7 +113,7 @@ type Exporter struct {
 	cacheHit     *prom.CounterVec
 }
 
-func (e *Exporter) Describe(ch chan<- *prom.Desc) {
+func (e *exporter) Describe(ch chan<- *prom.Desc) {
 	ch <- e.totalScrapes.Desc()
 	ch <- e.error.Desc()
 	e.apiRequests.Describe(ch)
@@ -116,7 +121,7 @@ func (e *Exporter) Describe(ch chan<- *prom.Desc) {
 	e.scrapeErrors.Describe(ch)
 }
 
-func (e *Exporter) Collect(ch chan<- prom.Metric) {
+func (e *exporter) Collect(ch chan<- prom.Metric) {
 	e.scrape(ch)
 
 	ch <- e.totalScrapes
@@ -126,7 +131,7 @@ func (e *Exporter) Collect(ch chan<- prom.Metric) {
 	e.cacheHit.Collect(ch)
 }
 
-func (e *Exporter) scrape(ch chan<- prom.Metric) {
+func (e *exporter) scrape(ch chan<- prom.Metric) {
 	start := time.Now()
 	defer e.totalScrapes.Observe(time.Since(start).Seconds())
 	e.error.Set(0)
@@ -167,18 +172,18 @@ func (e *Exporter) scrape(ch chan<- prom.Metric) {
 	}
 }
 
-func (e *Exporter) responseFromCache(tgt Target) *ApiResponse {
+func (e *exporter) responseFromCache(tgt types.Target) *types.ApiResponse {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	entry, present := e.cache[tgt.Name]
-	if present && time.Now().Unix() < int64(tgt.Interval)+entry.lastUpdated.Unix() {
+	if present && time.Now().Unix() < int64(tgt.Interval)+entry.LastUpdated.Unix() {
 		e.cacheHit.WithLabelValues(tgt.Name).Inc()
-		return entry.lastResponse
+		return entry.LastResponse
 	}
 	return nil
 }
 
-func (e *Exporter) FetchTarget(target Target) (*ApiResponse, error) {
+func (e *exporter) FetchTarget(target types.Target) (*types.ApiResponse, error) {
 	if fromCache := e.responseFromCache(target); fromCache != nil {
 		return fromCache, nil
 	}
@@ -194,7 +199,7 @@ func (e *Exporter) FetchTarget(target Target) (*ApiResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp := &ApiResponse{
+	resp := &types.ApiResponse{
 		Main:       oc.Main,
 		Wind:       oc.Wind,
 		Visibility: oc.Visibility,
@@ -204,48 +209,55 @@ func (e *Exporter) FetchTarget(target Target) (*ApiResponse, error) {
 		Name:       oc.Name,
 	}
 	e.lock.Lock()
-	e.cache[target.Name] = CacheEntry{
-		lastResponse: resp,
-		lastUpdated:  time.Now(),
+	e.cache[target.Name] = types.CacheEntry{
+		LastResponse: resp,
+		LastUpdated:  time.Now(),
 	}
 	e.lock.Unlock()
 	return resp, nil
 }
 
-func NewExporter(config *Config, logger log.Logger) *Exporter {
-	return &Exporter{
+func (e *exporter) setup() {
+	e.totalScrapes = prom.NewSummary(prom.SummaryOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "scrapes_total",
+		Help:      "Total number of times OWM was scraped for metrics.",
+	})
+	e.apiRequests = prom.NewCounterVec(prom.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "api_requests",
+		Help:      "Total number of API requests for given location.",
+	}, []string{"location"})
+	e.cacheHit = prom.NewCounterVec(prom.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "cache_hit",
+		Help:      "Total number of cache hits for given location.",
+	}, []string{"location"})
+
+	e.scrapeErrors = prom.NewCounterVec(prom.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "scrape_errors_total",
+		Help:      "Total number of times an error occurred scraping a OWM.",
+	}, []string{"collector"})
+
+	e.error = prom.NewGauge(prom.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "last_scrape_error",
+		Help:      "Whether the last scrape of metrics from OWM resulted in an error (1 for error, 0 for success).",
+	})
+}
+
+func NewExporter(config *types.Config, logger log.Logger) prom.Collector {
+	e := &exporter{
 		logger: logger,
 		config: config,
-		cache:  map[string]CacheEntry{},
-		totalScrapes: prom.NewSummary(prom.SummaryOpts{
-			Namespace: namespace,
-			Subsystem: subsystem,
-			Name:      "scrapes_total",
-			Help:      "Total number of times OWM was scraped for metrics.",
-		}),
-		apiRequests: prom.NewCounterVec(prom.CounterOpts{
-			Namespace: namespace,
-			Subsystem: subsystem,
-			Name:      "api_requests",
-			Help:      "Total number of API requests for given location.",
-		}, []string{"location"}),
-		cacheHit: prom.NewCounterVec(prom.CounterOpts{
-			Namespace: namespace,
-			Subsystem: subsystem,
-			Name:      "cache_hit",
-			Help:      "Total number of cache hits for given location.",
-		}, []string{"location"}),
-		scrapeErrors: prom.NewCounterVec(prom.CounterOpts{
-			Namespace: namespace,
-			Subsystem: subsystem,
-			Name:      "scrape_errors_total",
-			Help:      "Total number of times an error occurred scraping a OWM.",
-		}, []string{"collector"}),
-		error: prom.NewGauge(prom.GaugeOpts{
-			Namespace: namespace,
-			Subsystem: subsystem,
-			Name:      "last_scrape_error",
-			Help:      "Whether the last scrape of metrics from OWM resulted in an error (1 for error, 0 for success).",
-		}),
+		cache:  map[string]types.CacheEntry{},
 	}
+	e.setup()
+	return e
 }
