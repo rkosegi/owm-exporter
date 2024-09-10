@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/collectors/version"
+	"github.com/prometheus/common/promslog"
 	"github.com/rkosegi/owm-exporter/internal"
 	"net/http"
 	"os"
@@ -28,11 +29,9 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/promlog"
-	"github.com/prometheus/common/promlog/flag"
+	"github.com/prometheus/common/promslog/flag"
 	pv "github.com/prometheus/common/version"
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 
@@ -67,31 +66,32 @@ func init() {
 }
 
 func main() {
-	promlogConfig := &promlog.Config{}
+	promlogConfig := &promslog.Config{}
+	logger := promslog.New(promlogConfig)
+
 	flag.AddFlags(kingpin.CommandLine, promlogConfig)
 
 	kingpin.Version(pv.Print(progName))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
-	logger := promlog.New(promlogConfig)
 
-	level.Info(logger).Log("msg", "Starting "+progName, "version", pv.Info())
-	level.Info(logger).Log("msg", "Build context", "build_context", pv.BuildContext())
-	level.Info(logger).Log("msg", "Loading configuration from from file", "file", configFile)
+	logger.Info("Starting "+progName, "version", pv.Info())
+	logger.Info("Build context", "build_context", pv.BuildContext())
+	logger.Info("Loading configuration from from file", "file", configFile)
 
 	config, err := internal.LoadConfig(*configFile)
 
 	if err != nil {
-		level.Error(logger).Log("msg", "Error reading configuration", "err", err)
+		logger.Error("Error reading configuration", "err", err)
 		os.Exit(1)
 	}
-	level.Info(logger).Log("msg", fmt.Sprintf("Got %d targets", len(config.Targets)))
+	logger.Info(fmt.Sprintf("Got %d targets", len(config.Targets)))
 
 	r := prometheus.NewRegistry()
 	r.MustRegister(version.NewCollector(progName))
 
 	if err := r.Register(internal.NewExporter(config, logger)); err != nil {
-		level.Error(logger).Log("msg", "Couldn't register "+progName, "err", err)
+		logger.Error("Couldn't register "+progName, "err", err)
 		os.Exit(1)
 	}
 
@@ -125,7 +125,7 @@ func main() {
 		},
 	})
 	if err != nil {
-		level.Error(logger).Log("msg", "Couldn't create landing page", "err", err)
+		logger.Error("Couldn't create landing page", "err", err)
 		os.Exit(1)
 	}
 
@@ -140,7 +140,7 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	if err := web.ListenAndServe(srv, toolkitFlags, logger); err != nil {
-		level.Error(logger).Log("msg", "Error starting server", "err", err)
+		logger.Error("Error starting server", "err", err)
 		os.Exit(1)
 	}
 }

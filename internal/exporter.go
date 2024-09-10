@@ -20,10 +20,9 @@ package internal
 import (
 	"context"
 	owm "github.com/briandowns/openweathermap"
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/rkosegi/owm-exporter/types"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -104,7 +103,7 @@ type exporter struct {
 	lock         sync.Mutex
 	cache        map[string]types.CacheEntry
 	ctx          context.Context
-	logger       log.Logger
+	logger       *slog.Logger
 	config       *types.Config
 	totalScrapes prom.Summary
 	apiRequests  *prom.CounterVec
@@ -137,11 +136,11 @@ func (e *exporter) scrape(ch chan<- prom.Metric) {
 	e.error.Set(0)
 
 	for _, target := range e.config.Targets {
-		level.Debug(e.logger).Log("msg", "Processing target", "target", target.Name)
+		e.logger.Debug("Processing target", "target", target.Name)
 
 		resp, err := e.FetchTarget(target)
 		if err != nil {
-			level.Error(e.logger).Log("msg", "Error while fetching current conditions", "name", target.Name, "err", err)
+			e.logger.Error("Error while fetching current conditions", "name", target.Name, "err", err)
 			e.scrapeErrors.WithLabelValues("collect.current." + target.Name).Inc()
 			e.error.Set(1)
 		} else {
@@ -252,7 +251,7 @@ func (e *exporter) setup() {
 	})
 }
 
-func NewExporter(config *types.Config, logger log.Logger) prom.Collector {
+func NewExporter(config *types.Config, logger *slog.Logger) prom.Collector {
 	e := &exporter{
 		logger: logger,
 		config: config,
