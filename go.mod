@@ -7,7 +7,7 @@ toolchain go1.22.5
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/briandowns/openweathermap v0.20.0
-	github.com/prometheus/client_golang v1.20.3
+	github.com/prometheus/client_golang v1.20.4
 	github.com/prometheus/common v0.59.1
 	github.com/prometheus/exporter-toolkit v0.13.0
 	gopkg.in/yaml.v2 v2.4.0
