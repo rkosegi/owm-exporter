@@ -18,8 +18,9 @@
 package types
 
 import (
-	owm "github.com/briandowns/openweathermap"
 	"time"
+
+	owm "github.com/briandowns/openweathermap"
 )
 
 type Target struct {

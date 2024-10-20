@@ -19,12 +19,13 @@ package internal
 
 import (
 	"context"
-	owm "github.com/briandowns/openweathermap"
-	prom "github.com/prometheus/client_golang/prometheus"
-	"github.com/rkosegi/owm-exporter/types"
 	"log/slog"
 	"sync"
 	"time"
+
+	owm "github.com/briandowns/openweathermap"
+	prom "github.com/prometheus/client_golang/prometheus"
+	"github.com/rkosegi/owm-exporter/types"
 )
 
 const (

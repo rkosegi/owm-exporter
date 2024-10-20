@@ -18,8 +18,9 @@
 package internal
 
 import (
-	"github.com/rkosegi/owm-exporter/types"
 	"os"
+
+	"github.com/rkosegi/owm-exporter/types"
 
 	"gopkg.in/yaml.v2"
 )
