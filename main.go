@@ -19,14 +19,15 @@ package main
 
 import (
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	"github.com/prometheus/client_golang/prometheus/collectors/version"
-	"github.com/prometheus/common/promslog"
-	"github.com/rkosegi/owm-exporter/internal"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/collectors/version"
+	"github.com/prometheus/common/promslog"
+	"github.com/rkosegi/owm-exporter/internal"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/prometheus/client_golang/prometheus"
