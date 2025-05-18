@@ -68,7 +68,6 @@ func init() {
 
 func main() {
 	promlogConfig := &promslog.Config{}
-	logger := promslog.New(promlogConfig)
 
 	flag.AddFlags(kingpin.CommandLine, promlogConfig)
 
@@ -76,9 +75,10 @@ func main() {
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
+	logger := promslog.New(promlogConfig)
 	logger.Info("Starting "+progName, "version", pv.Info())
 	logger.Info("Build context", "build_context", pv.BuildContext())
-	logger.Info("Loading configuration from from file", "file", configFile)
+	logger.Info("Loading configuration from from file", "file", *configFile)
 
 	config, err := internal.LoadConfig(*configFile)
 
