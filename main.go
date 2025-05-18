@@ -91,7 +91,7 @@ func main() {
 	r := prometheus.NewRegistry()
 	r.MustRegister(version.NewCollector(progName))
 
-	if err := r.Register(internal.NewExporter(config, logger)); err != nil {
+	if err = r.Register(internal.NewExporter(config, logger)); err != nil {
 		logger.Error("Couldn't register "+progName, "err", err)
 		os.Exit(1)
 	}
@@ -140,7 +140,7 @@ func main() {
 	srv := &http.Server{
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	if err := web.ListenAndServe(srv, toolkitFlags, logger); err != nil {
+	if err = web.ListenAndServe(srv, toolkitFlags, logger); err != nil {
 		logger.Error("Error starting server", "err", err)
 		os.Exit(1)
 	}
